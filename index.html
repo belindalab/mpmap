@@ -1,0 +1,1532 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Система мониторинга посещений МП/ЛПУ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+
+  <!-- Убрали Font Awesome - используем только текст -->
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #334155;
+    }
+    
+    /* Убираем шапку - теперь всё в sidebar */
+    
+    /* Боковая панель */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: -320px;
+      width: 320px;
+      height: 100vh;
+      background: white;
+      border-right: 1px solid #e2e8f0;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+      z-index: 1000;
+      transition: left 0.3s ease;
+      overflow-y: auto;
+    }
+    
+    .sidebar.open {
+      left: 0;
+    }
+    
+    .sidebar-header {
+      padding: 1rem;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f8fafc;
+    }
+    
+    .sidebar-title {
+      font-weight: 600;
+      color: #374151;
+    }
+    
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 1.25rem;
+      cursor: pointer;
+      color: #6b7280;
+      padding: 0.25rem;
+    }
+    
+    .filters {
+      padding: 1rem;
+    }
+    
+    .filter-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    .filter-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+    
+    .filter-input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: white;
+      font-size: 0.875rem;
+      transition: border-color 0.2s;
+    }
+    
+    .filter-input:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    .select-multiple {
+      min-height: 120px;
+      resize: vertical;
+    }
+    
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+    
+    .btn-primary {
+      background: #374151;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #4b5563;
+    }
+    
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+      border: 1px solid #d1d5db;
+    }
+    
+    .btn-secondary:hover {
+      background: #e5e7eb;
+    }
+    
+    /* Toggle кнопка - точно такая же как карточки статистики */
+    .menu-toggle {
+      background: white;
+      color: #374151;
+      border: 1px solid #e2e8f0;
+      padding: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+    
+    .menu-toggle:hover {
+      background: #f8fafc;
+      color: #374151;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .menu-toggle.active {
+      background: #374151;
+      color: white;
+    }
+    
+    .menu-toggle.active:hover {
+      background: #4b5563;
+    }
+    
+    /* Основной контент */
+    .main-content {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 1rem;
+      min-height: 100vh;
+      transition: margin-left 0.3s ease;
+    }
+    
+    .main-content.sidebar-open {
+      margin-left: 320px;
+    }
+    
+    /* Статистика сверху */
+    .top-stats {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      display: grid;
+      grid-template-columns: 100px repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+      margin-top: 3rem;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    
+    /* Место для кнопки меню в сетке */
+    .menu-space {
+      grid-column: 1;
+    }
+    
+    .stat-card {
+      text-align: center;
+      padding: 1rem;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    .stat-number {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+    
+    .stat-label {
+      font-size: 0.75rem;
+      color: #64748b;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    
+    .map-container {
+      grid-column: 1;
+      grid-row: 2;
+      margin-top: 1rem;
+    }
+    
+    .right-panels {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .panel {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    
+    .panel-header {
+      padding: 1rem;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .panel-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+    
+    /* Таблица */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    th, td {
+      padding: 0.75rem 0.5rem;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 0.875rem;
+    }
+    
+    th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #374151;
+      position: sticky;
+      top: 0;
+    }
+    
+    tbody tr {
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    tbody tr:hover {
+      background: #f8fafc;
+    }
+    
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    
+    .badge-entry {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+    
+    .badge-exit {
+      background: #f8fafc;
+      color: #64748b;
+      border: 1px solid #d1d5db;
+    }
+    
+    /* Статусы нарушений */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    
+    .status-ok {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+    
+    .status-violation {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+    
+    .status-no-zone {
+      background: #f8fafc;
+      color: #6b7280;
+      border: 1px solid #d1d5db;
+    }
+    
+    /* Подсветка строк с нарушениями */
+    tbody tr.violation {
+      background-color: rgba(239, 68, 68, 0.05);
+      border-left: 3px solid #ef4444;
+    }
+    
+    tbody tr.violation:hover {
+      background-color: rgba(239, 68, 68, 0.1);
+    }
+    
+    .journal-content {
+      max-height: 45vh;
+      overflow-y: auto;
+    }
+    
+    .duration-content {
+      max-height: 35vh;
+      overflow-y: auto;
+    }
+    
+    .status-info {
+      padding: 1rem;
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+    
+    .duration-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+    
+    .duration-badge.long {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+    
+    .duration-badge.short {
+      background: #f8fafc;
+      color: #6b7280;
+      border: 1px solid #d1d5db;
+    }
+    
+    /* Стили для меток зон ЛПУ */
+    .zone-label {
+      z-index: 999 !important;
+      pointer-events: auto !important;
+    }
+    
+    .zone-label div {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .zone-label div:hover {
+      background: rgba(75, 85, 99, 0.9) !important;
+    }
+    
+    /* Простые стили без анимаций */
+    
+    /* Overlay */
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+    }
+    
+    .overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    /* Адаптивность */
+    @media (max-width: 1200px) {
+      .top-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .main-content {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto;
+        padding: 0.5rem;
+      }
+      
+      .top-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      
+      .stat-card {
+        padding: 0.75rem;
+      }
+      
+      .stat-number {
+        font-size: 1.5rem;
+      }
+      
+      .map-container {
+        grid-column: 1;
+        grid-row: 2;
+        height: 50vh !important;
+        margin-top: 0.5rem;
+      }
+      
+      .right-panels {
+        grid-column: 1;
+        grid-row: 3;
+        margin-top: 0.5rem;
+      }
+      
+      .main-content.sidebar-open {
+        margin-left: 0;
+      }
+      
+      .sidebar {
+        width: 100%;
+        left: -100%;
+      }
+      
+      .top-stats {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.5rem !important;
+        margin-top: 1rem !important;
+        padding: 0.5rem !important;
+      }
+      
+      .menu-space {
+        display: none;
+      }
+      
+      /* Мобильная кнопка меню */
+      .mobile-menu-toggle {
+        display: block;
+        position: fixed;
+        top: 0.5rem;
+        left: 0.5rem;
+        z-index: 1001;
+        background: #374151;
+        color: white;
+        border: none;
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .mobile-menu-toggle.active {
+        left: 0.5rem;
+        background: #6b7280;
+      }
+      
+      .sidebar {
+        top: 0;
+      }
+      
+      .journal-content {
+        max-height: 30vh;
+      }
+      
+      .duration-content {
+        max-height: 25vh;
+      }
+      
+      th, td {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Мобильная кнопка меню -->
+  <button class="mobile-menu-toggle" id="mobileMenuToggle" title="Открыть панель управления" style="display: none;">
+    МЕНЮ
+  </button>
+  
+  <!-- Overlay -->
+  <div class="overlay" id="overlay"></div>
+  
+  <!-- Боковая панель -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">
+        Мониторинг посещений
+      </div>
+      <button class="close-btn" id="closeSidebar">
+        ✕
+      </button>
+    </div>
+    
+    
+    <div style="padding: 1rem; border-bottom: 1px solid #e2e8f0;">
+      <div style="font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+        Фильтры
+      </div>
+    </div>
+    
+    <div class="filters">
+      <div class="filter-group">
+        <label class="filter-label">
+          Медицинские представители
+      </label>
+        <select id="mp" class="filter-input select-multiple" multiple>
+          <option value="">Загрузка...</option>
+        </select>
+      </div>
+      
+      <div class="filter-group">
+        <label class="filter-label">
+          Дата с
+      </label>
+        <input id="from" type="date" class="filter-input">
+      </div>
+      
+      <div class="filter-group">
+        <label class="filter-label">
+          Дата по
+      </label>
+        <input id="to" type="date" class="filter-input">
+      </div>
+      
+      <div class="filter-group">
+        <label class="filter-label">
+          Тип события
+      </label>
+        <select id="io" class="filter-input">
+          <option value="">Все события</option>
+          <option value="Вход">Только входы</option>
+          <option value="Выход">Только выходы</option>
+        </select>
+      </div>
+      
+      <div class="filter-group">
+        <label class="filter-label">
+          Нарушения
+      </label>
+        <select id="outside" class="filter-input">
+          <option value="">Все записи</option>
+          <option value="1">Только нарушения</option>
+        </select>
+    </div>
+      
+      <div class="filter-group">
+        <button id="loadBtn" class="btn btn-primary">
+          Найти
+        </button>
+        <button id="fitBtn" class="btn btn-secondary">
+          Показать все
+        </button>
+      </div>
+    </div>
+  </div>
+  
+
+  <!-- Основной контент -->
+  <main class="main-content" id="mainContent">
+    <!-- Статистика сверху -->
+    <div class="top-stats">
+      <div class="menu-space">
+        <button class="menu-toggle" id="menuToggle" title="Открыть панель управления">
+          МЕНЮ
+        </button>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color: #475569;" id="totalCount">0</div>
+        <div class="stat-label">Всего</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color: #475569;" id="entriesCount">0</div>
+        <div class="stat-label">Входы</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color: #475569;" id="exitsCount">0</div>
+        <div class="stat-label">Выходы</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" style="color: #dc2626;" id="violationsCount">0</div>
+        <div class="stat-label">Нарушения</div>
+      </div>
+    </div>
+    
+    <!-- Карта -->
+    <div class="map-container" style="position: relative; height: calc(100vh - 180px); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div id="map"></div>
+      <!-- Плавающая кнопка Зоны -->
+      <button id="toggleZonesBtn" style="
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 1000;
+        padding: 0.5rem 0.75rem;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #374151;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        backdrop-filter: blur(4px);
+        transition: all 0.2s ease;
+      " title="Переключить отображение зон ЛПУ">
+        Зоны
+      </button>
+    </div>
+    
+    <!-- Правые панели -->
+    <div class="right-panels">
+      <!-- Журнал -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            Журнал посещений
+          </div>
+        </div>
+        <div class="status-info" id="statusInfo">
+          Готов к поиску
+        </div>
+        <div class="journal-content">
+        <table>
+          <thead>
+            <tr>
+                <th>Дата</th>
+                <th>Время</th>
+                <th>МП</th>
+                <th>ЛПУ</th>
+                <th>Тип</th>
+                <th>Статус</th>
+            </tr>
+          </thead>
+            <tbody id="tbody">
+              <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: #9ca3af; font-weight: 500;">
+                  Выберите параметры для поиска
+                </td>
+              </tr>
+            </tbody>
+        </table>
+      </div>
+      </div>
+      
+      <!-- Продолжительность посещений -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            Продолжительность посещений
+          </div>
+        </div>
+        <div class="duration-content">
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>МП</th>
+                <th>ЛПУ</th>
+                <th>Вход</th>
+                <th>Выход</th>
+                <th>Время</th>
+              </tr>
+            </thead>
+            <tbody id="durationTbody">
+              <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: #9ca3af; font-weight: 500;">
+                  Данные о продолжительности появятся после поиска
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ===== НАСТРОЙКА =====
+    const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbzinDEWVgIjlgPETNYHXKE85xPRGLSyKY87lIBqhTl61feoCQvMGt7-yeB7ySDeP1fMxQ/exec';
+
+    // ===== UI элементы =====
+    const mpEl = document.getElementById('mp');
+    const fromEl = document.getElementById('from');
+    const toEl = document.getElementById('to');
+    const ioEl = document.getElementById('io');
+    const outsideEl = document.getElementById('outside');
+    const loadBtn = document.getElementById('loadBtn');
+    const fitBtn = document.getElementById('fitBtn');
+    const tbody = document.getElementById('tbody');
+    const durationTbody = document.getElementById('durationTbody');
+    const statusInfo = document.getElementById('statusInfo');
+    const totalCountEl = document.getElementById('totalCount');
+    const entriesCountEl = document.getElementById('entriesCount');
+    const exitsCountEl = document.getElementById('exitsCount');
+    const violationsCountEl = document.getElementById('violationsCount');
+    const toggleZonesBtn = document.getElementById('toggleZonesBtn');
+    
+    // Sidebar элементы
+    const menuToggle = document.getElementById('menuToggle');
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const sidebar = document.getElementById('sidebar');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const overlay = document.getElementById('overlay');
+    const mainContent = document.getElementById('mainContent');
+    
+    // Состояние отображения зон (по умолчанию показаны)
+    let zonesVisible = true;
+
+    // ===== JSONP =====
+    function jsonp(url, cbPrefix, onDone){
+      const s = document.createElement('script');
+      const cb = (cbPrefix || 'cb') + '_' + Math.random().toString(36).slice(2);
+      window[cb] = function(data){ try{ onDone(data); } finally{ delete window[cb]; s.remove(); } };
+      const sep = url.includes('?') ? '&' : '?';
+      s.src = url + sep + 'callback=' + cb;
+      s.onerror = () => { onDone({ ok:false, error:'JSONP failed' }); };
+      document.head.appendChild(s);
+    }
+
+    // ===== Карта =====
+    const map = L.map('map', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+    map.setView([41.20438, 74.766098], 8);
+
+    const layerPoints = L.layerGroup().addTo(map);
+    const layerZones = L.layerGroup().addTo(map); // Слой для ЛПУ зон
+
+    // Цветные маркеры: вход зеленый, выход красный
+    const iconIn = L.divIcon({
+      className: 'custom-marker entry-marker',
+      html: '<div style="width:20px;height:20px;background:#10b981;border:2px solid #fff;border-radius:4px;box-shadow:0 2px 4px rgba(16, 185, 129, 0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:bold;">В</div>',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+    
+    const iconOut = L.divIcon({
+      className: 'custom-marker exit-marker',
+      html: '<div style="width:22px;height:20px;background:#ef4444;border:2px solid #fff;border-radius:4px;box-shadow:0 2px 4px rgba(239, 68, 68, 0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:7px;font-weight:bold;">Вых</div>',
+      iconSize: [22, 20],
+      iconAnchor: [11, 10]
+    });
+    
+    // Маркеры для нарушений
+    const iconInViolation = L.divIcon({
+      className: 'custom-marker entry-marker violation',
+      html: '<div style="width:24px;height:24px;background:#dc2626;border:2px solid #fff;border-radius:4px;box-shadow:0 2px 8px rgba(220, 38, 38, 0.4);display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:bold;">!</div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    
+    const iconOutViolation = L.divIcon({
+      className: 'custom-marker exit-marker violation',
+      html: '<div style="width:24px;height:24px;background:#dc2626;border:2px solid #fff;border-radius:4px;box-shadow:0 2px 8px rgba(220, 38, 38, 0.4);display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:bold;">!</div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    
+    let visitData = [];
+    let zonesData = []; // Данные о ЛПУ зонах
+    let lastBounds = null;
+
+    // ===== Sidebar =====
+    function toggleSidebar() {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+      if (menuToggle) menuToggle.classList.toggle('active');
+      if (mobileMenuToggle) mobileMenuToggle.classList.toggle('active');
+      mainContent.classList.toggle('sidebar-open');
+      
+      // Обновляем подсказки кнопок
+      const isOpen = sidebar.classList.contains('open');
+      const title = isOpen ? 'Закрыть панель управления' : 'Открыть панель управления';
+      
+      if (menuToggle) menuToggle.title = title;
+      if (mobileMenuToggle) mobileMenuToggle.title = title;
+    }
+    
+    if (menuToggle) menuToggle.addEventListener('click', toggleSidebar);
+    if (mobileMenuToggle) mobileMenuToggle.addEventListener('click', toggleSidebar);
+    closeSidebar.addEventListener('click', toggleSidebar);
+    overlay.addEventListener('click', toggleSidebar);
+
+    // ===== Справочник МП =====
+    function loadMPs() {
+      const url = DEFAULT_URL.trim();
+      if (!url) return;
+      
+      mpEl.innerHTML = '<option value="">Загрузка МП...</option>';
+      mpEl.disabled = true;
+      
+      jsonp(url + '?page=mps', 'mps', (res) => {
+        mpEl.disabled = false;
+        mpEl.innerHTML = '<option value="">Все МП</option>';
+        
+        if (res.data && res.data.length > 0) {
+          res.data.forEach(name => {
+          const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+          mpEl.appendChild(opt);
+        });
+          updateStatus(`Загружено ${res.data.length} МП`);
+        } else {
+          updateStatus('МП не найдено');
+        }
+      });
+    }
+
+    // ===== Загрузка ЛПУ зон =====
+    function loadZones() {
+      const url = DEFAULT_URL.trim();
+      if (!url) return;
+      
+      jsonp(url + '?page=zones', 'zones', (res) => {
+        if (res && res.ok && res.data && res.data.length > 0) {
+          zonesData = res.data;
+          // displayZones(); - убираем автоматическое отображение, зоны скрыты по умолчанию
+          updateStatus(`Загружено ${res.data.length} ЛПУ зон (скрыты)`);
+        } else {
+          updateStatus('ЛПУ зоны не найдены');
+        }
+      });
+    }
+
+    // ===== Отображение ЛПУ зон на карте =====
+    function displayZones() {
+        layerZones.clearLayers();
+      
+      if (!zonesVisible) return; // Если зоны скрыты, не отображаем их
+      
+      zonesData.forEach(zone => {
+        if (zone.lat && zone.lon && zone.radius_m) {
+          // Создаем серый круг зоны
+          const circle = L.circle([zone.lat, zone.lon], {
+            radius: zone.radius_m,
+            color: '#6b7280',
+            weight: 2,
+            fillColor: '#6b7280',
+            fillOpacity: 0.1,
+            dashArray: '8, 4'
+          });
+          
+          // Создаем текстовую метку в центре (адаптивный размер)
+          const truncatedName = zone.lpu.length > 20 ? zone.lpu.substring(0, 17) + '...' : zone.lpu;
+          const labelWidth = Math.min(Math.max(truncatedName.length * 8, 80), 180);
+          const fontSize = zone.radius_m > 200 ? '12px' : zone.radius_m > 100 ? '11px' : '10px';
+          
+          const label = L.divIcon({
+            className: 'zone-label',
+            html: `<div style="
+              background: rgba(71, 85, 105, 0.9);
+              color: white;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-size: ${fontSize};
+              font-weight: 600;
+              text-align: center;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+              border: 1px solid #e2e8f0;
+              white-space: nowrap;
+              max-width: ${labelWidth}px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            ">${truncatedName}</div>`,
+            iconSize: [labelWidth, 20],
+            iconAnchor: [labelWidth/2, 10]
+          });
+          
+          const marker = L.marker([zone.lat, zone.lon], { 
+            icon: label,
+            interactive: true,
+            riseOnHover: true
+          });
+          
+          // Добавляем всплывающее окно к кругу
+          circle.bindPopup(`
+            <div style="font-family: -apple-system, sans-serif; padding: 12px; min-width: 180px; border-radius: 4px;">
+              <h4 style="margin: 0 0 8px; color: #475569; font-size: 14px; font-weight: 600;">
+                ${zone.lpu}
+              </h4>
+              <div style="font-size: 12px; color: #6b7280;">
+                <div style="margin-bottom: 6px; font-family: monospace;">
+                  ${zone.lat.toFixed(5)}, ${zone.lon.toFixed(5)}
+                </div>
+                <div style="padding: 4px 6px; background: #f1f5f9; border-radius: 4px; font-weight: 500; color: #475569;">
+                  Радиус зоны: ${zone.radius_m} м
+                </div>
+              </div>
+            </div>
+          `);
+          
+          // Добавляем всплывающее окно к метке
+          marker.bindPopup(`
+            <div style="font-family: -apple-system, sans-serif; padding: 12px; min-width: 180px; border-radius: 4px;">
+              <h4 style="margin: 0 0 8px; color: #475569; font-size: 14px; font-weight: 600;">
+                ${zone.lpu}
+              </h4>
+              <div style="font-size: 12px; color: #6b7280;">
+                <div style="margin-bottom: 6px; font-family: monospace;">
+                  ${zone.lat.toFixed(5)}, ${zone.lon.toFixed(5)}
+                </div>
+                <div style="padding: 4px 6px; background: #f1f5f9; border-radius: 4px; font-weight: 500; color: #475569;">
+                  Радиус зоны: ${zone.radius_m} м
+                </div>
+              </div>
+            </div>
+          `);
+          
+          layerZones.addLayer(circle);
+          layerZones.addLayer(marker);
+        }
+      });
+      
+      // Если есть зоны и нет других данных, показываем все зоны на карте
+      if (zonesVisible && zonesData.length > 0 && visitData.length === 0) {
+        const bounds = zonesData
+          .filter(z => z.lat && z.lon)
+          .map(z => [z.lat, z.lon]);
+          
+        if (bounds.length > 0) {
+          const zoneBounds = L.latLngBounds(bounds);
+          map.fitBounds(zoneBounds.pad(0.2));
+        }
+      }
+    }
+
+    // ===== Переключение видимости зон =====
+    function toggleZones() {
+      zonesVisible = !zonesVisible;
+      
+      if (zonesVisible) {
+        displayZones();
+        toggleZonesBtn.style.background = '#475569';
+        toggleZonesBtn.style.color = 'white';
+        toggleZonesBtn.style.borderColor = '#475569';
+        toggleZonesBtn.title = 'Скрыть зоны ЛПУ';
+      } else {
+        layerZones.clearLayers();
+        toggleZonesBtn.style.background = 'rgba(255, 255, 255, 0.95)';
+        toggleZonesBtn.style.color = '#374151';
+        toggleZonesBtn.style.borderColor = '#d1d5db';
+        toggleZonesBtn.title = 'Показать зоны ЛПУ';
+      }
+    }
+
+    // ===== Обновление статуса =====
+    function updateStatus(message) {
+      statusInfo.textContent = message;
+    }
+
+    // ===== Обновление статистики =====
+    function updateStats(total = 0, entries = 0, exits = 0, violations = 0) {
+      totalCountEl.textContent = total;
+      entriesCountEl.textContent = entries;
+      exitsCountEl.textContent = exits;
+      violationsCountEl.textContent = violations;
+    }
+
+    // ===== Вычисление продолжительности посещений =====
+    function calculateDurations(data) {
+      const durations = [];
+      const grouped = {};
+      
+      // Группируем по МП + ЛПУ + дате
+      data.forEach(record => {
+        const key = `${record.mp}_${record.lpu}_${record.date}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            mp: record.mp,
+            lpu: record.lpu,
+            date: record.date,
+            entries: [],
+            exits: []
+          };
+        }
+        
+        if (record.io === 'Вход') {
+          grouped[key].entries.push(record);
+        } else if (record.io === 'Выход') {
+          grouped[key].exits.push(record);
+        }
+      });
+      
+      // Вычисляем продолжительность
+      Object.values(grouped).forEach(group => {
+        // Сортируем по времени
+        group.entries.sort((a, b) => a.time.localeCompare(b.time));
+        group.exits.sort((a, b) => a.time.localeCompare(b.time));
+        
+        // Находим пары вход-выход
+        for (let i = 0; i < group.entries.length; i++) {
+          const entry = group.entries[i];
+          // Ищем ближайший выход после этого входа
+          const exit = group.exits.find(e => e.time > entry.time);
+          
+          if (exit) {
+            const duration = calculateTimeDifference(entry.time, exit.time);
+            if (duration.minutes > 0 || duration.hours > 0) {
+              durations.push({
+                date: group.date,
+                mp: group.mp,
+                lpu: group.lpu,
+                entryTime: entry.time,
+                exitTime: exit.time,
+                duration: duration
+              });
+              
+              // Убираем использованный выход
+              const exitIndex = group.exits.indexOf(exit);
+              group.exits.splice(exitIndex, 1);
+            }
+          }
+        }
+      });
+      
+      return durations.sort((a, b) => {
+        const dateCompare = b.date.localeCompare(a.date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.mp.localeCompare(b.mp);
+      });
+    }
+    
+    // ===== Расчет разности времени =====
+    function calculateTimeDifference(startTime, endTime) {
+      const [startHours, startMinutes] = startTime.split(':').map(Number);
+      const [endHours, endMinutes] = endTime.split(':').map(Number);
+      
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+      
+      let diffMinutes = endTotalMinutes - startTotalMinutes;
+      
+      // Если разность отрицательная, возможно переход через полночь
+      if (diffMinutes < 0) {
+        diffMinutes += 24 * 60; // Добавляем 24 часа
+      }
+      
+      const hours = Math.floor(diffMinutes / 60);
+      const minutes = diffMinutes % 60;
+      
+      return { hours, minutes, totalMinutes: diffMinutes };
+    }
+    
+    // ===== Форматирование продолжительности =====
+    function formatDuration(duration) {
+      if (duration.hours > 0) {
+        return `${duration.hours}ч ${duration.minutes}м`;
+      }
+      return `${duration.minutes}м`;
+    }
+    
+    // ===== Получение класса badge для продолжительности =====
+    function getDurationBadgeClass(totalMinutes) {
+      if (totalMinutes < 30) return 'short'; // Короткое посещение
+      if (totalMinutes > 120) return 'long'; // Долгое посещение
+      return ''; // Обычное посещение
+    }
+
+    // ===== Вычисление расстояния между двумя точками (Haversine formula) =====
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371000; // Радиус Земли в метрах
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      return R * c; // Расстояние в метрах
+    }
+
+    // ===== Проверка нарушений =====
+    function checkViolation(visitRecord) {
+      // Ищем соответствующую ЛПУ зону
+      const lpuZone = zonesData.find(zone => 
+        zone.lpu.toLowerCase().trim() === visitRecord.lpu.toLowerCase().trim()
+      );
+      
+      if (!lpuZone || !lpuZone.lat || !lpuZone.lon || !lpuZone.radius_m) {
+        return {
+          status: 'no-zone',
+          distance: null,
+          message: 'Зона не найдена'
+        };
+      }
+      
+      if (!visitRecord.lat || !visitRecord.lon) {
+        return {
+          status: 'no-coords',
+          distance: null,
+          message: 'Нет координат'
+        };
+      }
+      
+      const distance = calculateDistance(
+        visitRecord.lat, visitRecord.lon,
+        lpuZone.lat, lpuZone.lon
+      );
+      
+      const isInsideZone = distance <= lpuZone.radius_m;
+      
+      return {
+        status: isInsideZone ? 'ok' : 'violation',
+        distance: Math.round(distance),
+        message: isInsideZone ? 'В зоне' : `Вне зоны (${Math.round(distance)}м)`,
+        isViolation: !isInsideZone
+      };
+    }
+
+    // ===== Загрузка посещений =====
+    function loadVisits() {
+      const url = DEFAULT_URL.trim();
+      if (!url) return alert('Ошибка: URL не настроен.');
+
+      loadBtn.disabled = true;
+      loadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Поиск...';
+      updateStatus('Загрузка данных...');
+
+      const params = new URLSearchParams({ page: 'medvisits', limit: '2000' });
+      const selectedMPs = Array.from(mpEl.selectedOptions).map(o => o.value).filter(Boolean);
+      if (selectedMPs.length) params.set('mp', selectedMPs.join(','));
+      if (fromEl.value) params.set('from', fromEl.value);
+      if (toEl.value) params.set('to', toEl.value);
+      if (ioEl.value) params.set('io', ioEl.value);
+      if (outsideEl.value) params.set('outside', outsideEl.value);
+
+      jsonp(url + '?' + params.toString(), 'visits', (res) => {
+        loadBtn.disabled = false;
+        loadBtn.innerHTML = '<i class="fas fa-search"></i> Найти';
+        
+        layerPoints.clearLayers();
+        tbody.innerHTML = '';
+        durationTbody.innerHTML = '';
+        visitData = [];
+
+        if (!res || !res.ok) {
+          updateStatus('Ошибка загрузки данных');
+          updateStats(0, 0, 0, 0);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td colspan="6" style="text-align: center; padding: 2rem; color: #dc2626; font-weight: 500;">
+            Ошибка загрузки данных
+          </td>`;
+          tbody.appendChild(tr);
+          
+          const durationTr = document.createElement('tr');
+          durationTr.innerHTML = `<td colspan="6" style="text-align: center; padding: 2rem; color: #dc2626; font-weight: 500;">
+            Ошибка загрузки данных
+          </td>`;
+          durationTbody.appendChild(durationTr);
+          return;
+        }
+
+        const bounds = [];
+        visitData = res.data || [];
+
+        // Сначала обрабатываем все записи и добавляем информацию о нарушениях
+        visitData.forEach(r => {
+          const violation = checkViolation(r);
+          r.violation = violation;
+        });
+
+        // Применяем фильтр "только нарушения" если нужно
+        if (outsideEl.value === '1') {
+          visitData = visitData.filter(r => r.violation && r.violation.isViolation);
+        }
+
+        let violationsCount = visitData.filter(r => r.violation && r.violation.isViolation).length;
+        
+        visitData.forEach((r, index) => {
+          const violation = r.violation; // Используем уже вычисленный результат
+
+          // маркер точки (выбираем иконку в зависимости от нарушения)
+          if (isFinite(r.lat) && isFinite(r.lon)) {
+            let icon;
+            if (violation.isViolation) {
+              icon = (r.io === 'Вход') ? iconInViolation : iconOutViolation;
+            } else {
+              icon = (r.io === 'Вход') ? iconIn : iconOut;
+            }
+            const mark = L.marker([r.lat, r.lon], { icon });
+            
+            // Добавляем информацию о нарушении в popup
+            const violationInfo = violation.status === 'violation' 
+              ? `<div style="margin-top: 8px; padding: 8px; background: #fef2f2; border-radius: 4px; border-left: 3px solid #dc2626;">
+                   <strong style="color: #dc2626; font-size: 12px; text-transform: uppercase;">НАРУШЕНИЕ</strong><br>
+                   <small style="color: #6b7280;">${violation.message}</small>
+                 </div>`
+              : violation.status === 'ok'
+                ? `<div style="margin-top: 8px; padding: 8px; background: #f1f5f9; border-radius: 4px; border-left: 3px solid #475569;">
+                     <small style="color: #475569; font-weight: 500;">${violation.message}</small>
+                   </div>`
+                : `<div style="margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 4px;">
+                     <small style="color: #6b7280;">${violation.message}</small>
+                   </div>`;
+            
+            mark.bindPopup(`
+              <div style="font-family: -apple-system, sans-serif; padding: 12px; min-width: 200px; border-radius: 4px;">
+                <h4 style="margin: 0 0 8px; color: #374151; font-size: 14px; font-weight: 600;">
+                  ${r.mp}
+                </h4>
+                <div style="background: #f8fafc; padding: 8px; border-radius: 4px; margin-bottom: 8px; border: 1px solid #e2e8f0;">
+                  <div style="font-weight: 600; color: #1f2937;">${r.lpu}</div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; font-size: 12px;">
+                  <div style="color: #6b7280; font-weight: 500;">${r.date}</div>
+                  <div style="color: #6b7280; font-weight: 500;">${r.time}</div>
+                </div>
+                <div style="text-align: center; margin-bottom: 8px;">
+                  <span style="padding: 4px 8px; background: ${r.io === 'Вход' ? '#f1f5f9' : '#f8fafc'}; color: #475569; border-radius: 4px; font-size: 11px; font-weight: 500; border: 1px solid #e2e8f0;">
+                    ${r.io}
+                  </span>
+                </div>
+                ${violationInfo}
+              </div>
+            `);
+            
+            layerPoints.addLayer(mark);
+            bounds.push([r.lat, r.lon]);
+          }
+
+          // строка таблицы
+          const tr = document.createElement('tr');
+          tr.dataset.index = index;
+          
+          // Добавляем класс нарушения если нужно
+          if (violation.isViolation) {
+            tr.classList.add('violation');
+          }
+          
+          // Простой текст без бейджей
+          const ioText = r.io; // Просто "Вход" или "Выход"
+          
+          // Создаем статус без координат
+          let statusText = '';
+          let statusColor = '';
+          switch (violation.status) {
+            case 'ok':
+              statusText = 'В зоне';
+              statusColor = 'color: #10b981; font-weight: 500;';
+              break;
+            case 'violation':
+              statusText = 'Нарушение';
+              statusColor = 'color: #dc2626; font-weight: 600;';
+              break;
+            case 'no-zone':
+              statusText = 'Зона не найдена';
+              statusColor = 'color: #6b7280; font-weight: 500;';
+              break;
+            default:
+              statusText = 'Нет данных';
+              statusColor = 'color: #6b7280; font-weight: 500;';
+          }
+          
+          tr.innerHTML = `
+            <td>${r.date}</td>
+            <td style="font-weight: 600;">${r.time}</td>
+            <td style="color: #475569; font-weight: 500;">${r.mp}</td>
+            <td>${r.lpu}</td>
+            <td style="font-weight: 500;">${ioText}</td>
+            <td style="${statusColor}">${statusText}</td>
+          `;
+          
+          tr.addEventListener('click', () => {
+            if (r.lat && r.lon) {
+              map.setView([r.lat, r.lon], 15);
+              // Закрываем sidebar на мобильных
+              if (window.innerWidth <= 768) {
+                toggleSidebar();
+              }
+            }
+          });
+          
+          tbody.appendChild(tr);
+        });
+
+        // Обновляем статистику
+        const recordsCount = visitData.length;
+        const entriesCount = visitData.filter(r => r.io === 'Вход').length;
+        const exitsCount = visitData.filter(r => r.io === 'Выход').length;
+        
+        updateStats(recordsCount, entriesCount, exitsCount, violationsCount);
+        
+        if (recordsCount > 0) {
+          let statusMessage = `Найдено ${recordsCount} записей (входов: ${entriesCount}, выходов: ${exitsCount})`;
+          if (violationsCount > 0) {
+            statusMessage += ` - ВНИМАНИЕ: ${violationsCount} нарушений!`;
+          }
+          updateStatus(statusMessage);
+        } else {
+          updateStatus('Ничего не найдено');
+        }
+
+        // Вычисляем и отображаем продолжительность посещений
+        const durations = calculateDurations(visitData);
+        
+        if (durations.length > 0) {
+          durations.forEach(duration => {
+            const durationTr = document.createElement('tr');
+            durationTr.style.cursor = 'pointer';
+            
+            const badgeClass = getDurationBadgeClass(duration.duration.totalMinutes);
+            const durationBadge = `<span class="duration-badge ${badgeClass}">
+              ${formatDuration(duration.duration)}
+            </span>`;
+            
+            durationTr.innerHTML = `
+              <td>${duration.date}</td>
+              <td style="color: #475569; font-weight: 500;">${duration.mp}</td>
+              <td>${duration.lpu}</td>
+              <td style="font-weight: 600;">${duration.entryTime}</td>
+              <td style="font-weight: 600;">${duration.exitTime}</td>
+              <td>${durationBadge}</td>
+            `;
+            
+            // Добавляем клик для перехода на карту (используем координаты входа если есть)
+            durationTr.addEventListener('click', () => {
+              const entryRecord = visitData.find(r => 
+                r.mp === duration.mp && 
+                r.lpu === duration.lpu && 
+                r.date === duration.date && 
+                r.time === duration.entryTime &&
+                r.io === 'Вход'
+              );
+              
+              if (entryRecord && entryRecord.lat && entryRecord.lon) {
+                map.setView([entryRecord.lat, entryRecord.lon], 15);
+                // Закрываем sidebar на мобильных
+                if (window.innerWidth <= 768) {
+                  toggleSidebar();
+                }
+              }
+            });
+            
+            durationTbody.appendChild(durationTr);
+          });
+        } else if (recordsCount > 0) {
+          const emptyDurationRow = document.createElement('tr');
+          emptyDurationRow.innerHTML = `<td colspan="6" style="text-align: center; padding: 2rem; color: #9ca3af; font-weight: 500;">
+            Не найдено завершенных посещений (пар вход-выход)
+          </td>`;
+          durationTbody.appendChild(emptyDurationRow);
+        }
+
+        // Отображаем зоны только если они включены
+        if (zonesVisible) {
+          displayZones();
+        }
+
+        if (bounds.length) {
+          lastBounds = L.latLngBounds(bounds);
+          map.fitBounds(lastBounds.pad(0.1));
+        } else if (recordsCount === 0) {
+          const emptyRow = document.createElement('tr');
+          emptyRow.innerHTML = `<td colspan="7" style="text-align: center; padding: 2rem; color: #9ca3af; font-weight: 500;">
+            По вашему запросу ничего не найдено
+          </td>`;
+          tbody.appendChild(emptyRow);
+          
+          const emptyDurationRow = document.createElement('tr');
+          emptyDurationRow.innerHTML = `<td colspan="6" style="text-align: center; padding: 2rem; color: #9ca3af; font-weight: 500;">
+            По вашему запросу ничего не найдено
+          </td>`;
+          durationTbody.appendChild(emptyDurationRow);
+        }
+      });
+    }
+
+    // ===== Обработчики событий =====
+    loadBtn.addEventListener('click', loadVisits);
+    
+    fitBtn.addEventListener('click', () => {
+      if (lastBounds) {
+        map.fitBounds(lastBounds.pad(0.1));
+      } else {
+        map.setView([41.20438, 74.766098], 8);
+      }
+    });
+    
+    // Обработчик кнопки переключения зон
+    toggleZonesBtn.addEventListener('click', toggleZones);
+
+    // ===== Утилиты =====
+    function setDefaultDates() {
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      
+      fromEl.value = firstDayOfMonth.toISOString().split('T')[0];
+      toEl.value = lastDayOfMonth.toISOString().split('T')[0];
+    }
+
+    // ===== Инициализация =====
+    document.addEventListener('DOMContentLoaded', () => {
+      // Показываем правильную кнопку в зависимости от размера экрана
+      function updateMenuButton() {
+        if (window.innerWidth <= 768) {
+          if (mobileMenuToggle) mobileMenuToggle.style.display = 'block';
+        } else {
+          if (mobileMenuToggle) mobileMenuToggle.style.display = 'none';
+        }
+      }
+      
+      updateMenuButton();
+      window.addEventListener('resize', updateMenuButton);
+      
+      // Загружаем справочники
+      loadMPs();
+      loadZones(); // Загружаем ЛПУ зоны
+      
+      setDefaultDates();
+      updateStatus('Загрузка системы...');
+      
+      // Устанавливаем начальный стиль плавающей кнопки зон (показаны по умолчанию)
+      toggleZonesBtn.style.background = 'rgba(55, 65, 81, 0.95)';
+      toggleZonesBtn.style.color = 'white';
+      toggleZonesBtn.style.borderColor = '#374151';
+      toggleZonesBtn.title = 'Скрыть зоны ЛПУ';
+      
+      // Автоматически открываем sidebar при первом запуске для показа функционала
+      setTimeout(() => {
+        if (!sidebar.classList.contains('open')) {
+          toggleSidebar();
+          
+          // Показываем подсказку пользователю
+          updateStatus('Панель управления открыта. Выберите МП и нажмите "Найти"');
+        }
+      }, 2000);
+      
+      // Небольшая задержка для красивого отображения загрузки
+      setTimeout(() => {
+        if (zonesData.length > 0) {
+          updateStatus(`Система готова. Загружено ${zonesData.length} ЛПУ зон (отображаются по умолчанию)`);
+        } else {
+          updateStatus('Система готова к работе');
+        }
+      }, 1500);
+    });
+  </script>
+</body>
+</html>
